@@ -32,6 +32,8 @@ const sesClient = new SESv2Client({
 })
 
 // Email Configuration
+const path = require('path')
+const validFileTypes = ['.doc', '.docx', '.pdf', '.rtf', '.txt']
 const transporter = nodemailer.createTransport({
     SES: { sesClient, SendEmailCommand }
 })
@@ -64,6 +66,18 @@ function getAttachment(req) {
 }
 
 // Cleanup
+function checkForValidAttachment(attachment) {
+    var extension = path.extname(attachment[0].path).toLowerCase()
+    var isValid = validFileTypes.includes(extension)
+
+    if (isValid)
+        return true
+    else {
+        deleteAttachmentFromServer(attachment)
+        return false
+    }
+}
+
 function deleteAttachmentFromServer(attachment) {
     if (attachment.length == 0)
         return
@@ -84,6 +98,13 @@ app.post('/send', multipartMiddleware, (req, res) => {
     var message = getMessage(req)
     var attachment = getAttachment(req)
 
+    if (attachment.length > 0) {
+        if (!checkForValidAttachment(attachment)) {
+            res.send(415)
+            return
+        }
+    }
+
     transporter.sendMail({
         from: process.env.EMAIL,
         to: [process.env.EMAIL],
@@ -91,10 +112,13 @@ app.post('/send', multipartMiddleware, (req, res) => {
         text: message,
         attachments: attachment
     }, function(error, info) {
-        if (error)
+        if (error) {
+            res.send(460)
             console.log(error)
-        else
+        } else {
+            res.send(200)
             console.log(`Sent email: ${info.response}`)
+        }
         console.log('------------------')
 
         deleteAttachmentFromServer(attachment)
